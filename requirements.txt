@@ -1,0 +1,7 @@
+requests>=2.31
+python-dotenv>=1.0
+Pillow>=10.0
+# pyinstaller hanya untuk build EXE (install di PC build saja)
+# pyinstaller>=6.0
+# Optional: OCR otomatis dari hasil capture (butuh binary Tesseract terinstall)
+# pytesseract>=0.3.10
