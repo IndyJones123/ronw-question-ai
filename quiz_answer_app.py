@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Quiz Answer App v2 - image-only.
+"""Quiz Answer App v2 - image-only, mode CEPAT (streaming).
 
 Alur baru (tanpa ketik soal):
   1. Buka aplikasi -> box capture merah langsung muncul di layar.
@@ -7,16 +7,24 @@ Alur baru (tanpa ketik soal):
      drag gagang kuning buat resize).
   3. Klik SATU tombol "Give Me The Answer" -> isi box di-screenshot
      dan langsung dikirim sebagai gambar ke CommandCode AI.
-  4. Jawaban muncul di Answer Log.
+  4. Jawaban muncul per-potongan di Answer Log (huruf pilihan duluan),
+     plus timing "huruf pertama X.Xs / total X.Xs".
+
+Setelan kecepatan (.env): COMMANDCODE_STREAM, ANSWER_MAX_TOKENS,
+ANSWER_REASONING_EFFORT (default 'off' = model nggak nalar dulu),
+ANSWER_TEMPERATURE, COMMANDCODE_WARMUP (panaskan koneksi pas app dibuka).
 
 .env tetap di sebelah .py / .exe (jangan di-bundle ke EXE).
 Build: pyinstaller quiz_answer.spec
+Tes offline: python test_speed.py
 """
 import base64
 import datetime
 import io
+import json
 import os
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 
@@ -41,6 +49,138 @@ TRANSPARENT_COLOR = "magenta"  # warna yg dilubangi di overlay Windows
 
 MAX_IMG_W = 960   # resize sebelum kirim biar payload kecil & jawaban cepat
 JPEG_QUALITY = 75
+
+# ---- setelan kecepatan (buat cepat-cepatan) ----
+# STREAM=1      : jawaban ditampilkan token per token (huruf pilihan muncul duluan)
+# MAX_TOKENS    : batas token - jawaban pendek, sisanya dipotong biar nggak nge-generate basa-basi
+# TEMPERATURE   : 0 = deterministik; kosongkan kalau model nolak parameter ini
+# WARMUP=1      : sekali di awal app, koneksi (DNS+TCP+TLS+pool) dipanaskan dulu,
+#                 jadi klik PERTAMA nggak kena biaya handshake
+def _env_flag(name, default="1"):
+    return os.getenv(name, default).strip().lower() not in ("0", "false", "no", "off")
+
+
+STREAM = _env_flag("COMMANDCODE_STREAM")
+# 128: dengan reasoning OFF model berhenti setelah jawaban pendek, jadi limit ini
+# murni cadangan - naikin kalau ganti model ke tipe yang nge-generate reasoning sendiri.
+MAX_TOKENS = int(os.getenv("ANSWER_MAX_TOKENS", "128"))
+RETRY_MAX_TOKENS = int(os.getenv("ANSWER_RETRY_MAX_TOKENS", "512"))
+TEMP_RAW = os.getenv("ANSWER_TEMPERATURE", "0").strip()
+# 'off' bikin model tipe deepseek nggak buang token buat nalar dulu
+# (terbukti: jawaban keluar ~2.1s vs ~4s versi lama, dan jawaban nggak pernah kosong).
+# Kosongkan ("" ) kalau mau pakai default bawaan model.
+REASONING_EFFORT = os.getenv("ANSWER_REASONING_EFFORT", "off").strip()
+WARMUP = _env_flag("COMMANDCODE_WARMUP")
+
+SESSION = requests.Session()  # keep-alive: TLS handshake cukup sekali, klik berikutnya tinggal pakai
+
+# parameter opsional - aman dibuang kalau model nolak (HTTP 400)
+OPTIONAL_PARAMS = ("reasoning_effort", "temperature")
+
+
+def _post_chat(payload, stream, timeout):
+    """POST /chat/completions dengan fallback parameter yang ditolak model.
+
+    Beberapa model nolak reasoning_effort/temperature (HTTP 400) - kalau gitu
+    param itu dibuang lalu dicoba sekali lagi, biar app tetap jalan walau model diganti.
+    """
+    last_body = ""
+    for _ in range(2):
+        resp = SESSION.post(
+            f"{BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {API_KEY}",
+                     "Content-Type": "application/json"},
+            json=payload,
+            timeout=timeout,
+            stream=stream,
+        )
+        if resp.status_code != 400:
+            return resp
+        last_body = resp.text[:400]
+        resp.close()
+        dropped = [k for k in OPTIONAL_PARAMS if k in payload]
+        if not dropped:
+            break
+        for k in dropped:
+            payload.pop(k, None)
+    raise RuntimeError(f"HTTP 400: {last_body}")
+
+
+def _sse_text(lines):
+    """Ambil potong teks (delta content) dari baris-baris response SSE chat/completions."""
+    for raw in lines:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8", "replace")
+        line = (raw or "").strip()
+        if not line.startswith("data:"):
+            continue
+        data = line[5:].strip()
+        if data == "[DONE]":
+            break
+        try:
+            obj = json.loads(data)
+        except ValueError:
+            continue
+        for ch in obj.get("choices") or ():
+            chunk = ch.get("delta") or ch.get("message") or {}
+            piece = chunk.get("content")
+            if piece:
+                yield piece
+
+
+def _read_answer(resp, stream, t_start, on_piece=None):
+    """Baca jawaban dari response API -> (answer, elapsed_ke_token_pertama).
+
+    on_piece(dipanggil tiap potong teks) dipakai UI buat nulis jawaban
+    sambil jalan, jadi huruf pilihan langsung kelihatan tanpa nunggu selesai.
+    """
+    ctype = resp.headers.get("Content-Type", "") or ""
+    if stream and "event-stream" in ctype:
+        parts, first = [], None
+        for piece in _sse_text(resp.iter_lines(decode_unicode=True)):
+            if first is None:
+                first = time.perf_counter() - t_start
+            parts.append(piece)
+            if on_piece:
+                on_piece(piece)
+        return "".join(parts).strip(), first
+
+    try:
+        data = resp.json()
+        ch = (data.get("choices") or [{}])[0]
+        text = ((ch.get("message") or {}).get("content") or "").strip()
+    except ValueError:
+        # provider tetap ngirim SSE tapi content-type-nya bukan text/event-stream
+        parts, first = [], None
+        for piece in _sse_text(resp.text.splitlines()):
+            if first is None:
+                first = time.perf_counter() - t_start
+            parts.append(piece)
+            if on_piece:
+                on_piece(piece)
+        return "".join(parts).strip(), first
+
+    if on_piece and text:
+        on_piece(text)
+    return text, (time.perf_counter() - t_start) if text else None
+
+
+def warm_up():
+    """Panaskan koneksi ke API sekali pas app dibuka (diam-diam, error diabaikan)."""
+    if not WARMUP or not API_KEY or "isi_api_key" in API_KEY:
+        return
+    try:
+        SESSION.post(
+            f"{BASE_URL}/chat/completions",
+            headers={"Authorization": f"Bearer {API_KEY}",
+                     "Content-Type": "application/json"},
+            json={"model": DEFAULT_MODEL,
+                  "messages": [{"role": "user", "content": "ping"}],
+                  "max_tokens": 1},
+            timeout=15,
+        ).close()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 class CaptureBox:
@@ -167,12 +307,16 @@ class QuizApp:
         self.busy = False
         self.preview_img = None
         self.last_path = ""
+        self._streaming = False
+        self._t0 = 0.0
 
         self.box = CaptureBox(root, on_change=self._refresh_coords)
 
         self._build_ui()
         self._refresh_key_status()
         self._refresh_coords()
+        # panaskan koneksi biar klik pertama nggak kena biaya TLS handshake
+        threading.Thread(target=warm_up, daemon=True).start()
 
     # ---------- UI ----------
     def _build_ui(self):
@@ -202,13 +346,16 @@ class QuizApp:
         info.pack(fill="x")
         self.coord_label = ttk.Label(info, text="", foreground="#0b5ed7")
         self.coord_label.pack(side="left")
+        self.time_label = ttk.Label(info, text="", foreground="#146c43")
+        self.time_label.pack(side="right", padx=8)
         self.topmost_var = tk.BooleanVar(value=True)
         ttk.Checkbutton(info, text="Always on top", variable=self.topmost_var,
                         command=self._apply_topmost).pack(side="right")
         self._apply_topmost()
 
         hint = ttk.Label(self.root, padding=(8, 0),
-                         text="1. Geser box merah ke atas soal  2. Klik Give Me The Answer",
+                         text="1. Geser box merah ke atas soal  2. Klik Give Me The Answer (F9)  "
+                              "3. Jawaban muncul per huruf, langsung kepencet",
                          foreground="gray")
         hint.pack(fill="x")
 
@@ -262,6 +409,29 @@ class QuizApp:
         self.log.see("end")
         self.log.config(state="disabled")
 
+    def _start_stream(self):
+        """Bikin baris jawaban kosong di log -> jawaban ditulis nempel di situ."""
+        self.log.config(state="normal")
+        self.log.insert("end", "----- ANSWER -----\n", "a")
+        self.log.see("end")
+        self.log.config(state="disabled")
+        self._streaming = True
+
+    def _append_live(self, text):
+        """Nulis potongan jawaban ke baris yang lagi streaming (dari thread -> dipanggil via after)."""
+        if not self._streaming:
+            return
+        self.log.config(state="normal")
+        self.log.insert("end", text, "a")
+        self.log.see("end")
+        self.log.config(state="disabled")
+
+    def _stream_status(self):
+        """Status "Jawaban keluar dalam X.Xs" - dipanggil saat token pertama masuk."""
+        if not self._streaming:
+            return
+        self._set_status(f"Jawaban keluar dalam {time.perf_counter() - self._t0:.1f}s ...")
+
     # ---------- ask AI (image) ---------- ( fungsi utama yang lempar ke ai )
     def ask_answer(self):
         if self.busy:
@@ -273,6 +443,7 @@ class QuizApp:
             self.box.show()
             self.btn_box.config(text="Hide Box")
         self.busy = True
+        self._t0 = time.perf_counter()  # timer mulai dari DETIK INI (klik), bukan dari mulai thread
         self.btn_ask.config(text="Thinking...", state="disabled")
         self._set_status("Capture + kirim gambar ke AI...")
         threading.Thread(target=self._ask_thread, daemon=True).start()
@@ -280,6 +451,8 @@ class QuizApp:
     def _ask_thread(self):
         model = self.model_var.get().strip() or DEFAULT_MODEL
         ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        t0 = self._t0
+        started = False  # udah bikin baris "ANSWER" di log belum (dipakai buat nutup di error)
         try:
             bbox = self.box.bbox()
             img = ImageGrab.grab(bbox=bbox).convert("RGB")
@@ -297,46 +470,116 @@ class QuizApp:
 
             thumb = img.copy()
             thumb.thumbnail((440, 150))
-            photo = ImageTk.PhotoImage(thumb)
-            self.root.after(0, self._show_preview, photo, path)
+            self.root.after(0, self._show_preview, thumb, path)
 
             self.root.after(0, self._append_log,
                              f"\n[{ts}] IMAGE ({img.width}x{img.height}, {model}):\n{path}\n", "q")
-            resp = requests.post(
-                f"{BASE_URL}/chat/completions",
-                headers={"Authorization": f"Bearer {API_KEY}",
-                         "Content-Type": "application/json"},
-                json={"model": model, "messages": [
-                    {"role": "system", "content": SYSTEM_PROMPT},
-                    {"role": "user", "content": [
-                        {"type": "text",
-                         "text": "Answer the quiz question in this screenshot. "
-                                 "Give the correct option/answer first, then a brief explanation."},
-                        {"type": "image_url", "image_url": {
-                            "url": f"data:image/jpeg;base64,{b64}"}},
-                    ]},
-                ]},
-                timeout=TIMEOUT,
-            )
-            if resp.status_code != 200:
-                raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:500]}")
-            answer = resp.json()["choices"][0]["message"]["content"].strip()
-            self.root.after(0, self._append_log,
-                             f"----- ANSWER -----\n{answer}\n{'='*50}\n", "a")
-            self.root.after(0, self._set_status, "Jawaban diterima.")
+
+            payload = self._build_payload(model, b64)
+
+            self.root.after(0, self._start_stream)
+            started = True
+            # on_piece jalan di thread ini, tapi nulis ke Tk tetap lewat after()
+            answer, first_dt = self._ask_api(payload, t0)
+            if not answer:
+                raise RuntimeError("AI tidak mengirim jawaban - cek model/base URL")
+            total = time.perf_counter() - t0
+            self.root.after(0, self._finish_answer, answer, first_dt, total)
         except Exception as e:  # noqa: BLE001
+            if started:
+                self.root.after(0, self._append_log, f"\n{'=' * 50}\n", "a")
+                self.root.after(0, self._finish_stream_flag)
             self.root.after(0, self._append_log, f"!!! ERROR: {e}\n", "err")
             self.root.after(0, self._set_status, f"Error: {e}")
         finally:
             self.root.after(0, self._ask_done)
 
-    def _show_preview(self, photo, path):
-        self.preview_img = photo  # tahan referensi
+    # ---------- request ke AI ----------
+    @staticmethod
+    def _build_payload(model, b64):
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": [
+                    {"type": "text",
+                     "text": "Answer the quiz question in this screenshot. "
+                             "Reply with ONLY the final answer (option letter + short text), "
+                             "no explanation, no reasoning."},
+                    {"type": "image_url", "image_url": {
+                        "url": f"data:image/jpeg;base64,{b64}"}},
+                ]},
+            ],
+            "max_tokens": MAX_TOKENS,
+            "stream": STREAM,
+        }
+        if REASONING_EFFORT:
+            payload["reasoning_effort"] = REASONING_EFFORT
+        if TEMP_RAW:
+            try:
+                payload["temperature"] = float(TEMP_RAW)
+            except ValueError:
+                pass  # bukan angka -> lepas, biar default model
+        return payload
+
+    @staticmethod
+    def _request(payload, stream=None):
+        if stream is None:
+            stream = STREAM
+        resp = _post_chat(payload, stream, TIMEOUT)
+        if resp.status_code != 200:
+            raise RuntimeError(f"HTTP {resp.status_code}: {resp.text[:500]}")
+        return resp
+
+    def _ask_api(self, payload, t0):
+        """-> (answer, elapsed_ke_huruf_pertama).
+
+        Tarik jawaban (streaming). Kalau keluar KOSONG (biasanya reasoning kehabisan
+        max_tokens di model tertentu), ulang sekali dengan budget token lebih besar.
+        Tiap potong teks langsung dilempar ke log, jadi huruf pilihan cepat kelihatan.
+        """
+        seen_first = [False]
+
+        def on_piece(piece):
+            self.root.after(0, self._append_live, piece)
+            if not seen_first[0]:
+                seen_first[0] = True
+                self.root.after(0, self._stream_status)
+
+        answer, first_dt = _read_answer(self._request(payload), STREAM, t0, on_piece=on_piece)
+        if answer:
+            return answer, first_dt
+        self.root.after(0, self._stream_status)
+        retry = dict(payload, max_tokens=RETRY_MAX_TOKENS)
+        return _read_answer(self._request(retry), STREAM, t0, on_piece=on_piece)
+
+    def _show_preview(self, thumb, path):
+        self.preview_img = ImageTk.PhotoImage(thumb)  # bikin PhotoImage di main thread
         self.preview_label.config(image=self.preview_img, text="")
         self._set_status(f"Captured -> {path}")
 
+    def _finish_answer(self, answer, first_dt, total):
+        """Tutup baris streaming + kasih ringkasan timing di log."""
+        self.log.config(state="normal")
+        self.log.insert("end", "\n", "a")
+        note = f"\n⏱ total {total:.2f}s"
+        if first_dt:
+            note += f"  (huruf pertama keluar di {first_dt:.2f}s)"
+        note += f"\n{'=' * 50}\n"
+        self.log.insert("end", note, "a")
+        self.log.see("end")
+        self.log.config(state="disabled")
+        self._streaming = False
+        shown = first_dt if first_dt else total
+        self._set_status(f"Jawaban diterima dalam {shown:.2f}s (total {total:.2f}s)")
+        self.time_label.config(text=f"⏱ {shown:.2f}s")
+
+    def _finish_stream_flag(self):
+        self._streaming = False
+
     def _ask_done(self):
         self.busy = False
+        self._streaming = False
         self.btn_ask.config(text="Give Me The Answer", state="normal")
 
     # ---------- log ----------
