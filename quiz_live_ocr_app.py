@@ -46,10 +46,17 @@ from PIL import Image, ImageGrab
 
 load_dotenv()
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+if getattr(sys, "frozen", False):
+    # PyInstaller: data ter-bundle di _MEIPASS, file runtime (.env, captures)
+    # ditaruh di samping EXE.
+    BASE_DIR = sys._MEIPASS
+    _EXE_DIR = os.path.dirname(sys.executable)
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    _EXE_DIR = BASE_DIR
 MODE_DIR = os.path.join(BASE_DIR, "quiz_databases", "mode")
 MODE_FILES = {"sage": "sage.json", "hoppy": "hoppy.json"}
-CAPTURE_DIR = os.path.join(BASE_DIR, "quiz_captures")
+CAPTURE_DIR = os.path.join(_EXE_DIR, "quiz_captures")
 TRANSPARENT_COLOR = "magenta"  # warna yg dilubangi di overlay Windows
 
 # ---- setelan live ----
@@ -364,6 +371,7 @@ class LiveQuizApp:
         root.minsize(520, 600)
 
         self.banks = {}
+        self.bank = None
         self.mode = ""
         self._last_match_id = None
         self._answers = []            # jawaban terakhir, terbaru di index 0 (max 2)
@@ -592,6 +600,9 @@ class LiveQuizApp:
             t0 = time.perf_counter()
             try:
                 bank = self.bank
+                if bank is None:
+                    self._stop_evt.wait(0.2)
+                    continue
                 bbox = self._bbox
                 if not bbox:
                     self._stop_evt.wait(0.2)

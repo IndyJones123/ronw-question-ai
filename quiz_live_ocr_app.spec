@@ -1,12 +1,20 @@
 # -*- mode: python ; coding: utf-8 -*-
 
-
 a = Analysis(
     ['quiz_live_ocr_app.py'],
     pathex=[],
     binaries=[],
-    datas=[],
-    hiddenimports=[],
+    datas=[
+        # Bank soal JSON wajib di-bundle ke dlm EXE (diakses via sys._MEIPASS).
+        ('quiz_databases/mode/sage.json', 'quiz_databases/mode'),
+        ('quiz_databases/mode/hoppy.json', 'quiz_databases/mode'),
+    ],
+    hiddenimports=[
+        'auth_client',
+        'dotenv',
+        'requests',
+        'PIL._tkinter_finder',
+    ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

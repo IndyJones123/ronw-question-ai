@@ -9,3 +9,5 @@ place_*/.sync-migration-backups/
 place_*/.sync-migration-stage/
 # END WEPPY SYNC RUNTIME
 .env
+dist
+build
