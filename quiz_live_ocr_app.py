@@ -41,7 +41,10 @@ import tkinter as tk
 from difflib import SequenceMatcher
 from tkinter import filedialog, scrolledtext, ttk
 
+from dotenv import load_dotenv
 from PIL import Image, ImageGrab
+
+load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODE_DIR = os.path.join(BASE_DIR, "quiz_databases", "mode")
@@ -765,18 +768,91 @@ def selftest():
     return 0 if ok == total else 1
 
 
+def _login_dialog() -> tuple[bool, dict]:
+    """Tampilkan dialog login Tkinter. Return (success, user_data).
+
+    user_data: {access_token, user:{...}, expires_in} kalau sukses.
+    """
+    import auth_client
+
+    win = tk.Tk()
+    win.title("Login - Quiz Live OCR")
+    win.geometry("380x280")
+    win.resizable(False, False)
+    try:
+        win.tk.call("tk", "scaling", 1.25)
+    except tk.TclError:
+        pass
+    win.attributes("-topmost", True)
+
+    ttk.Label(win, text="Quiz Live OCR - Login",
+              font=("Segoe UI", 14, "bold")).pack(pady=(18, 10))
+
+    form = ttk.Frame(win, padding=12)
+    form.pack(fill="x")
+
+    ttk.Label(form, text="Username:").pack(anchor="w")
+    entry_user = ttk.Entry(form, font=("Segoe UI", 11))
+    entry_user.pack(fill="x", pady=(0, 8))
+    ttk.Label(form, text="Password:").pack(anchor="w")
+    entry_pw = ttk.Entry(form, show="*", font=("Segoe UI", 11))
+    entry_pw.pack(fill="x", pady=(0, 8))
+
+    status_var = tk.StringVar(value="")
+    status_lbl = ttk.Label(win, textvariable=status_var, foreground="#cc0000",
+                          wraplength=340, justify="left")
+    status_lbl.pack(pady=(0, 4))
+
+    # cek backend hidup
+    if not auth_client.check_health(None):
+        status_var.set("Backend login tidak jalan. Start: .venv/Scripts/python -m uvicorn backend.main:app")
+    else:
+        status_var.set("")
+
+    result: dict = {}
+
+    def do_login(event=None):
+        username = entry_user.get().strip()
+        password = entry_pw.get()
+        if not username or not password:
+            status_var.set("Isi username dan password")
+            return
+        status_var.set("Memproses...")
+        win.update_idletasks()
+        ok, msg, data = auth_client.login(None, username, password)
+        if ok:
+            result.update(data)
+            win.destroy()
+        else:
+            status_var.set(msg)
+            entry_pw.delete(0, "end")
+            entry_pw.focus_set()
+
+    btn = ttk.Button(win, text="Login", command=do_login)
+    btn.pack(pady=4)
+    win.bind("<Return>", do_login)
+    win.bind("<Escape>", lambda e: win.destroy())
+
+    entry_user.focus_set()
+    win.mainloop()
+
+    return bool(result), result
+
+
 def main():
     global LIVE_INTERVAL, MATCH_THRESHOLD, OCR_PSM
     ap = argparse.ArgumentParser(description="Quiz Live OCR (tanpa AI)")
     ap.add_argument("--bench", action="store_true",
                     help="OCR semua png di quiz_captures + cocokkan (tanpa GUI)")
     ap.add_argument("--selftest", action="store_true",
-                    help="tiap soal di-DB di-feed balik ke matcher (akurasi murni)")
+                    help="tiap soal di-DB di-fed balik ke matcher (akurasi murni)")
     ap.add_argument("--folder", default=CAPTURE_DIR, help="folder png untuk --bench")
     ap.add_argument("--limit", type=int, default=0, help="batasi jumlah gambar bench")
     ap.add_argument("--psm", type=int, default=None, help="override OCR PSM")
     ap.add_argument("--interval", type=float, default=None, help="detik antar capture")
     ap.add_argument("--threshold", type=float, default=None, help="skor minimal match")
+    ap.add_argument("--skip-login", action="store_true",
+                    help="lewati dialog login (debug/testing)")
     args = ap.parse_args()
 
     if args.bench:
@@ -790,6 +866,13 @@ def main():
         MATCH_THRESHOLD = args.threshold
     if args.psm:
         OCR_PSM = args.psm
+
+    # ---- gate login ----
+    if not args.skip_login:
+        ok, user_data = _login_dialog()
+        if not ok:
+            print("Login gagal atau dibatalkan. Aplikasi tidak dibuka.")
+            return
 
     root = tk.Tk()
     try:
