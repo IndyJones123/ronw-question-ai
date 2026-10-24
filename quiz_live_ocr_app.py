@@ -47,14 +47,25 @@ from PIL import Image, ImageGrab
 load_dotenv()
 
 if getattr(sys, "frozen", False):
-    # PyInstaller: data ter-bundle di _MEIPASS, file runtime (.env, captures)
-    # ditaruh di samping EXE.
+    # PyInstaller: data ter-bundle di _MEIPASS, file runtime (.env, captures,
+    # quiz_databases) ditaruh di samping EXE.
     BASE_DIR = sys._MEIPASS
     _EXE_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     _EXE_DIR = BASE_DIR
-MODE_DIR = os.path.join(BASE_DIR, "quiz_databases", "mode")
+
+# Console Windows default cp1252: karakter dari soal (mis. − U+2212) bikin
+# UnicodeEncodeError pas print. Ganti jadi '?' supaya nggak crash.
+for _stream in (sys.stdout, sys.stderr):
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(errors="replace")
+
+# DB soal: cari di samping EXE dulu (bisa diganti tanpa rebuild),
+# kalau tidak ada pakai salinan ter-bundle di _MEIPASS.
+_mode_dir_runtime = os.path.join(_EXE_DIR, "quiz_databases", "mode")
+MODE_DIR = (_mode_dir_runtime if os.path.isdir(_mode_dir_runtime)
+            else os.path.join(BASE_DIR, "quiz_databases", "mode"))
 MODE_FILES = {"sage": "sage.json", "hoppy": "hoppy.json"}
 CAPTURE_DIR = os.path.join(_EXE_DIR, "quiz_captures")
 TRANSPARENT_COLOR = "magenta"  # warna yg dilubangi di overlay Windows
