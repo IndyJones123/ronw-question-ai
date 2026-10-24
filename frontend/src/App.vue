@@ -43,23 +43,23 @@ const i18n = {
       { num: '03', title: 'Geser Box', desc: 'Arahkan box merah ke soal di layar. OCR jalan otomatis.' },
       { num: '04', title: 'Jawaban Muncul', desc: 'Soal match → jawaban tampil di panel ANSWER instan.' },
     ],
-    // pricing
-    navPricing: 'Harga',
-    pricingTitle: 'Harga & Promo',
-    pricingDesc: 'Bayar sekali, pakai selamanya. Gratis trial 1 hari dulu.',
-    pricingPromoBadge: 'PROMO TERBATAS',
-    pricingPromoEnds: 'Promo berakhir 1 November 2026',
-    pricingBestValue: 'PALING HEMAT',
-    pricingFreeTrial: 'Free Trial',
-    pricingFreeTrialPrice: '$0',
-    pricingFreeTrialPeriod: '/1 hari',
-    pricingFreeTrialDesc: 'Coba semua fitur gratis selama 1 hari penuh.',
-    pricingTrialBtn: 'Coba Gratis',
-    pricingLifetime: 'Lifetime License',
-    pricingLifetimeDesc: 'Bayar sekali, gunakan selamanya. Tanpa biaya bulanan.',
-    pricingBuyBtn: 'Beli via WhatsApp',
-    pricingDeviceTitle: '1 Device Only',
-    pricingDeviceDesc: 'Lisensi hanya boleh dipakai di 1 perangkat (1 PC).',
+    // pricing / open source & donate
+    navPricing: 'Donasi',
+    pricingTitle: 'Gratis & Open Source',
+    pricingDesc: 'Semua fitur gratis, tanpa biaya, tanpa langganan. Proyek ini open source — kalau suka, boleh donasi.',
+    pricingPromoBadge: '100% OPEN SOURCE',
+    pricingPromoEnds: 'Tanpa biaya tersembunyi — dari ReogSoloDev',
+    pricingBestValue: 'SUKA-SUKA',
+    pricingFreeTrial: 'Open Source',
+    pricingFreeTrialPrice: 'Rp0',
+    pricingFreeTrialPeriod: '/selamanya',
+    pricingFreeTrialDesc: 'Semua fitur lengkap gratis selamanya. Tanpa biaya, tanpa trial, tanpa langganan.',
+    pricingTrialBtn: 'Download Gratis',
+    pricingLifetime: 'Donasi QRIS',
+    pricingLifetimeDesc: 'Kalau kamu suka proyek ini, traktir kopi seikhlasnya lewat QRIS. Opsional banget.',
+    pricingBuyBtn: 'Donasi via QRIS',
+    pricingQrCaption: 'Scan untuk donasi — seikhlasnya',
+    pricingDonationName: 'ReogSoloDev · Alfian Dorif Murtadlo',
     pricingIncludesTitle: 'Termasuk:',
     pricingIncludes: [
       'Semua fitur lengkap (OCR + AI mode)',
@@ -123,23 +123,23 @@ const i18n = {
       { num: '03', title: 'Drag Box', desc: 'Point the red box at the question on screen. OCR runs automatically.' },
       { num: '04', title: 'Answer Appears', desc: 'Question matched → answer shows in the ANSWER panel instantly.' },
     ],
-    // pricing
-    navPricing: 'Pricing',
-    pricingTitle: 'Pricing & Promo',
-    pricingDesc: 'Pay once, use forever. Free 1-day trial first.',
-    pricingPromoBadge: 'LIMITED PROMO',
-    pricingPromoEnds: 'Promo ends November 1, 2026',
-    pricingBestValue: 'BEST VALUE',
-    pricingFreeTrial: 'Free Trial',
-    pricingFreeTrialPrice: '$0',
-    pricingFreeTrialPeriod: '/1 day',
-    pricingFreeTrialDesc: 'Try all features free for 1 full day.',
-    pricingTrialBtn: 'Try Free',
-    pricingLifetime: 'Lifetime License',
-    pricingLifetimeDesc: 'Pay once, use forever. No monthly fees.',
-    pricingBuyBtn: 'Buy via WhatsApp',
-    pricingDeviceTitle: '1 Device Only',
-    pricingDeviceDesc: 'License may only be used on 1 device (1 PC).',
+    // pricing / open source & donate
+    navPricing: 'Donate',
+    pricingTitle: 'Free & Open Source',
+    pricingDesc: 'All features free — no fees, no subscriptions. This project is open source — if you like it, you can donate.',
+    pricingPromoBadge: '100% OPEN SOURCE',
+    pricingPromoEnds: 'No hidden fees — from ReogSoloDev',
+    pricingBestValue: 'PAY WHAT YOU WANT',
+    pricingFreeTrial: 'Open Source',
+    pricingFreeTrialPrice: 'Rp0',
+    pricingFreeTrialPeriod: '/forever',
+    pricingFreeTrialDesc: 'All features free forever. No fees, no trial, no subscription.',
+    pricingTrialBtn: 'Download Free',
+    pricingLifetime: 'QRIS Donation',
+    pricingLifetimeDesc: 'If you like this project, buy us a coffee via QRIS — any amount. Totally optional.',
+    pricingBuyBtn: 'Donate via QRIS',
+    pricingQrCaption: 'Scan to donate — any amount',
+    pricingDonationName: 'ReogSoloDev · Alfian Dorif Murtadlo',
     pricingIncludesTitle: 'Includes:',
     pricingIncludes: [
       'All features included (OCR + AI mode)',
@@ -171,6 +171,10 @@ const i18n = {
 
 // ---- config dari .env (VITE_* otomatis exposed ke client) ----
 const gdriveUrl = computed(() => import.meta.env.VITE_GDRIVE_URL || '#')
+const qrisImage = computed(() => import.meta.env.VITE_QRIS_IMAGE || '/qris-v2.png')
+const qrisFailed = ref(false)
+const onQrisLoad = () => { qrisFailed.value = false }
+const onQrisError = () => { qrisFailed.value = true }
 const waNumber = computed(() => import.meta.env.VITE_WHATSAPP_NUMBER || '620000000000')
 const discordUrl = computed(() => import.meta.env.VITE_DISCORD_URL || '#')
 const facebookUrl = computed(() => import.meta.env.VITE_FACEBOOK_URL || '#')
@@ -451,11 +455,21 @@ const isPlaceholder = (val: string) => !val || val.includes('XXXXX') || val === 
             </svg>
           </div>
           <h3 class="text-xl font-bold text-white">{{ t.pricingLifetime }}</h3>
-          <div class="mt-4 flex items-baseline gap-3">
-            <span class="text-lg text-slate-500 line-through">$5</span>
-            <span class="text-4xl font-extrabold text-white">$1.5</span>
+          <div class="mt-4 flex items-baseline gap-1">
+            <span class="text-4xl font-extrabold text-white">Seikhlasnya</span>
           </div>
           <p class="mt-3 text-sm text-slate-400 leading-relaxed">{{ t.pricingLifetimeDesc }}</p>
+          <div class="mt-6 flex justify-center">
+            <div class="w-44 min-h-[11rem] rounded-xl bg-white border border-slate-700 flex items-center justify-center overflow-hidden">
+              <img :src="qrisImage" alt="QRIS Donation" class="w-full h-auto object-contain" :class="qrisFailed ? 'hidden' : ''" @load="onQrisLoad" @error="onQrisError" />
+              <div class="qris-fallback" :class="qrisFailed ? 'flex' : 'hidden'" style="flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 1rem;">
+                <svg class="w-10 h-10 text-slate-400 mb-2" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM14.625 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0114.625 9.375v-4.5z" /><path stroke-linecap="round" stroke-linejoin="round" d="M14.625 14.625v4.5c0 .621.504 1.125 1.125 1.125h4.5c.621 0 1.125-.504 1.125-1.125v-4.5c0-.621-.504-1.125-1.125-1.125h-4.5a1.125 1.125 0 00-1.125 1.125z" /></svg>
+                <span class="text-xs text-slate-500 font-medium">QRIS</span>
+                <span class="text-[11px] text-slate-400 mt-1">{{ t.pricingDonationName }}</span>
+              </div>
+            </div>
+          </div>
+          <p class="mt-3 text-xs text-slate-500 text-center">{{ t.pricingQrCaption }}</p>
           <div class="mt-6 pt-6 border-t border-slate-800 flex-1">
             <p class="text-xs font-medium text-slate-500 mb-3">{{ t.pricingIncludesTitle }}</p>
             <ul class="space-y-2">
@@ -480,28 +494,17 @@ const isPlaceholder = (val: string) => !val || val.includes('XXXXX') || val === 
             </ul>
           </div>
           <a
-            :href="waLink"
+            :href="qrisImage"
             target="_blank"
             rel="noopener"
-            class="mt-6 inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-bold px-6 py-3 rounded-xl transition-colors min-h-[48px]"
+            class="mt-6 w-full inline-flex items-center justify-center gap-2 bg-brand-600 hover:bg-brand-500 text-white font-bold px-6 py-3 rounded-xl transition-colors min-h-[48px]"
           >
-            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M17.47 14.38c-.3-.15-1.77-.87-2.04-.97-.27-.1-.47-.15-.67.15-.2.3-.77.97-.94 1.17-.17.2-.35.22-.65.07-.3-.15-1.26-.46-2.4-1.48-.89-.79-1.49-1.77-1.66-2.07-.17-.3-.02-.46.13-.61.13-.13.3-.35.45-.52.15-.17.2-.3.3-.5.1-.2.05-.37-.02-.52-.08-.15-.67-1.62-.92-2.22-.24-.58-.49-.5-.67-.51l-.57-.01c-.2 0-.52.07-.8.37-.27.3-1.04 1.02-1.04 2.48 0 1.46 1.07 2.87 1.22 3.07.15.2 2.1 3.2 5.08 4.49.71.31 1.26.49 1.69.62.71.23 1.36.2 1.87.12.57-.08 1.77-.72 2.02-1.42.25-.7.25-1.3.17-1.42-.07-.13-.27-.2-.57-.35z"/>
-              <path d="M12 2C6.48 2 2 6.48 2 12c0 1.77.46 3.43 1.27 4.87L2 22l5.25-1.38A9.9 9.9 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2zm0 18.2c-1.5 0-2.9-.4-4.1-1.1l-.3-.17-3.12.82.83-3.04-.2-.31A8.16 8.16 0 013.8 12c0-4.53 3.67-8.2 8.2-8.2s8.2 3.67 8.2 8.2-3.67 8.2-8.2 8.2z"/>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 013.75 9.375v-4.5zM3.75 14.625c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5a1.125 1.125 0 01-1.125-1.125v-4.5zM14.625 4.875c0-.621.504-1.125 1.125-1.125h4.5c.621 0 1.125.504 1.125 1.125v4.5c0 .621-.504 1.125-1.125 1.125h-4.5A1.125 1.125 0 0114.625 9.375v-4.5z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.625 14.625v4.5c0 .621.504 1.125 1.125 1.125h4.5c.621 0 1.125-.504 1.125-1.125v-4.5c0-.621-.504-1.125-1.125-1.125h-4.5a1.125 1.125 0 00-1.125 1.125z" />
             </svg>
             {{ t.pricingBuyBtn }}
           </a>
-        </div>
-      </div>
-
-      <!-- 1 device restriction -->
-      <div class="mt-8 text-center">
-        <div class="inline-flex items-center gap-2 bg-slate-800/50 border border-slate-700 text-slate-400 text-sm px-4 py-2.5 rounded-lg">
-          <svg class="w-4 h-4 text-amber-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M5 13l4 4L19 7M12 3l8 4v6c0 5-3.5 7.5-8 9-4.5-1.5-8-4-8-9V7l8-4z" />
-          </svg>
-          <span class="font-semibold text-slate-300">{{ t.pricingDeviceTitle }}</span>
-          <span class="text-slate-500">— {{ t.pricingDeviceDesc }}</span>
         </div>
       </div>
     </div>
@@ -661,7 +664,12 @@ const isPlaceholder = (val: string) => !val || val.includes('XXXXX') || val === 
           </svg>
         </a>
       </div>
-      <p class="text-xs text-slate-600">{{ t.footerCopy }}</p>
+      <p class="text-xs text-slate-600">
+        © 2026
+        <a href="https://reogsolodev.com" target="_blank" rel="noopener"
+           class="text-slate-400 hover:text-slate-100 underline underline-offset-2 transition-colors">REOGSOLODEV</a>.
+        All rights reserved.
+      </p>
     </div>
   </footer>
 </template>
