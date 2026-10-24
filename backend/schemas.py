@@ -13,6 +13,13 @@ class LoginRequest(BaseModel):
     device: dict[str, Any] = Field(default_factory=dict)
 
 
+class RegisterRequest(BaseModel):
+    username: str = Field(min_length=3, max_length=64, pattern=r"^[A-Za-z0-9_.-]+$")
+    password: str = Field(min_length=6, max_length=256)
+    full_name: str = Field(default="", max_length=120)
+    device: dict[str, Any] = Field(default_factory=dict)
+
+
 class UserOut(BaseModel):
     id: int
     username: str

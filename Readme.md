@@ -80,9 +80,11 @@ Generate secret key:
 python -m backend.seed_user --gen-secret
 ```
 
-### 4. Buat user login (TIDAK ada user default — harus dibuat manual)
+### 4. Buat user login (opsional: bisa daftar lewat app atau CLI)
 
-Backend tidak punya endpoint register. User dibuat via CLI `seed_user`:
+User baru bisa dibuat dua cara:
+- Dari dialog login aplikasi, klik "Belum punya akun? Daftar" (memakai `POST /api/register`, akun langsung aktif dan langsung masuk).
+- Via CLI `seed_user`:
 
 ```bash
 # Tambah user
@@ -107,17 +109,37 @@ Password minimal 6 karakter.
 
 ### 5. Jalankan backend
 
-Migrasi database berjalan otomatis saat startup (tabel `users` + `login_logs` dibuat jika belum ada).
+Jalankan dari folder root project (`ronw-question-ai/`), bukan dari dalam folder `backend/`, karena modulnya di-import sebagai `backend.main`.
+
+Aktifkan venv dulu:
+
+```bash
+# Windows (PowerShell / cmd)
+.venv\Scripts\activate
+
+# Windows (git-bash)
+source .venv/Scripts/activate
+```
+
+Lalu jalankan uvicorn:
 
 ```bash
 python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000
 ```
 
-Atau pakai host/port dari config:
+Mode development (auto-reload saat file backend berubah):
+
+```bash
+python -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+Atau pakai host/port dari `backend/.env` (`AUTH_BIND_HOST` / `AUTH_BIND_PORT`):
 
 ```bash
 python -c "import uvicorn; from backend import config; uvicorn.run('backend.main:app', host=config.BIND_HOST, port=config.BIND_PORT)"
 ```
+
+Migrasi database berjalan otomatis saat startup (tabel `users` + `login_logs` dibuat jika belum ada). Dokumentasi interaktif API ada di http://127.0.0.1:8000/docs.
 
 Cek kesehatan:
 
@@ -132,6 +154,7 @@ curl http://127.0.0.1:8000/api/health
 |--------|-------------------|-------|-------------------------------------|
 | GET    | /api/health       | -     | Cek koneksi DB                      |
 | POST   | /api/login        | -     | Login → token + info user           |
+| POST   | /api/register     | -     | Daftar akun baru (aktif) → token    |
 | GET    | /api/me           | Bearer | Profil user dari token             |
 | GET    | /api/login-logs   | Bearer | Riwayat login + device (audit)     |
 
@@ -190,7 +213,7 @@ python quiz_answer_app.py
 ```
 ronw-question-ai/
 ├── backend/
-│   ├── main.py              # FastAPI app (login, health, me, login-logs)
+│   ├── main.py              # FastAPI app (login, register, health, me, login-logs)
 │   ├── config.py            # Konfigurasi dari .env
 │   ├── db.py                # Koneksi + migrasi PostgreSQL (psycopg 3)
 │   ├── security.py          # Hash password PBKDF2 + HMAC token
@@ -212,6 +235,6 @@ ronw-question-ai/
 ## Catatan
 
 - Backend bind default `127.0.0.1` — hanya lokal, jangan terekspos ke LAN.
-- Tidak ada endpoint register. User hanya bisa dibuat via `seed_user` CLI.
+- Register publik: akun langsung aktif. Username unik (409 kalau sudah dipakai), username 3-64 karakter `[A-Za-z0-9_.-]`, password minimal 6 karakter.
 - Login gagal pun dicatat di audit log (alasan: `unknown_user`, `bad_password`, `inactive`).
 - Respons login untuk user yang tidak ada / nonaktif sengaja dibuat sama waktunya dengan user yang ada (mencegah timing attack).

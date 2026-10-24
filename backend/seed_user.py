@@ -1,4 +1,4 @@
-"""CLI manajemen user (tanpa endpoint register).
+"""CLI manajemen user (user juga bisa daftar lewat POST /api/register).
 
 Pakai:
     python -m backend.seed_user add <username> <password> [--full-name "Nama"]
@@ -9,7 +9,7 @@ Pakai:
     python -m backend.seed_user --gen-secret            # generate AUTH_SECRET_KEY
     python -m backend.seed_user logs [username] [--limit 50]
 
-Semua operasi langsung ke DB - TIDAK ada endpoint register di API.
+Semua operasi langsung ke DB (tanpa melalui API).
 """
 from __future__ import annotations
 
@@ -159,7 +159,7 @@ def cmd_gen_secret(args):
 def main():
     ap = argparse.ArgumentParser(
         prog="backend.seed_user",
-        description="Manajemen user login (tanpa register endpoint)",
+        description="Manajemen user login",
     )
     sub = ap.add_subparsers(dest="cmd", required=True)
 

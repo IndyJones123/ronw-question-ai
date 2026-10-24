@@ -780,9 +780,11 @@ def selftest():
 
 
 def _login_dialog() -> tuple[bool, dict]:
-    """Tampilkan dialog login Tkinter. Return (success, user_data).
+    """Tampilkan dialog login/daftar Tkinter. Return (success, user_data).
 
     user_data: {access_token, user:{...}, expires_in} kalau sukses.
+    Mode "Daftar" memanggil POST /api/register; akun langsung aktif dan
+    token dari respons dipakai langsung (tanpa perlu login ulang).
     """
     import auth_client
 
@@ -796,18 +798,27 @@ def _login_dialog() -> tuple[bool, dict]:
         pass
     win.attributes("-topmost", True)
 
-    ttk.Label(win, text="Quiz Live OCR - Login",
+    title_var = tk.StringVar(value="Quiz Live OCR - Login")
+    ttk.Label(win, textvariable=title_var,
               font=("Segoe UI", 14, "bold")).pack(pady=(18, 10))
 
     form = ttk.Frame(win, padding=12)
     form.pack(fill="x")
 
-    ttk.Label(form, text="Username:").pack(anchor="w")
+    # field daftar (hanya tampil di mode register)
+    lbl_name = ttk.Label(form, text="Nama lengkap (opsional):")
+    entry_name = ttk.Entry(form, font=("Segoe UI", 11))
+
+    lbl_user = ttk.Label(form, text="Username:")
+    lbl_user.pack(anchor="w")
     entry_user = ttk.Entry(form, font=("Segoe UI", 11))
     entry_user.pack(fill="x", pady=(0, 8))
     ttk.Label(form, text="Password:").pack(anchor="w")
     entry_pw = ttk.Entry(form, show="*", font=("Segoe UI", 11))
     entry_pw.pack(fill="x", pady=(0, 8))
+
+    lbl_pw2 = ttk.Label(form, text="Ulangi password:")
+    entry_pw2 = ttk.Entry(form, show="*", font=("Segoe UI", 11))
 
     status_var = tk.StringVar(value="")
     status_lbl = ttk.Label(win, textvariable=status_var, foreground="#cc0000",
@@ -817,10 +828,41 @@ def _login_dialog() -> tuple[bool, dict]:
     # cek backend hidup
     if not auth_client.check_health(None):
         status_var.set("Backend login tidak jalan. Start: .venv/Scripts/python -m uvicorn backend.main:app")
-    else:
-        status_var.set("")
 
     result: dict = {}
+    state = {"register": False}
+
+    def set_register_mode(on: bool):
+        state["register"] = on
+        status_var.set("")
+        if on:
+            title_var.set("Quiz Live OCR - Daftar Akun")
+            lbl_name.pack(anchor="w", before=lbl_user)
+            entry_name.pack(fill="x", pady=(0, 8), before=lbl_user)
+            lbl_pw2.pack(anchor="w", after=entry_pw)
+            entry_pw2.pack(fill="x", pady=(0, 8), after=lbl_pw2)
+            btn.configure(text="Daftar & Masuk")
+            toggle_btn.configure(text="Sudah punya akun? Login")
+        else:
+            title_var.set("Quiz Live OCR - Login")
+            lbl_name.pack_forget()
+            entry_name.pack_forget()
+            lbl_pw2.pack_forget()
+            entry_pw2.pack_forget()
+            entry_pw2.delete(0, "end")
+            btn.configure(text="Login")
+            toggle_btn.configure(text="Belum punya akun? Daftar")
+        win.geometry("380x380" if on else "380x280")
+        entry_user.focus_set()
+
+    def toggle_mode():
+        set_register_mode(not state["register"])
+
+    def fail(msg: str):
+        status_var.set(msg)
+        entry_pw.delete(0, "end")
+        entry_pw2.delete(0, "end")
+        entry_pw.focus_set()
 
     def do_login(event=None):
         username = entry_user.get().strip()
@@ -835,13 +877,48 @@ def _login_dialog() -> tuple[bool, dict]:
             result.update(data)
             win.destroy()
         else:
-            status_var.set(msg)
-            entry_pw.delete(0, "end")
-            entry_pw.focus_set()
+            fail(msg)
 
-    btn = ttk.Button(win, text="Login", command=do_login)
+    def do_register(event=None):
+        username = entry_user.get().strip()
+        password = entry_pw.get()
+        password2 = entry_pw2.get()
+        full_name = entry_name.get().strip()
+        if not username or not password:
+            status_var.set("Isi username dan password")
+            return
+        if len(username) < 3:
+            status_var.set("Username minimal 3 karakter")
+            return
+        if len(password) < 6:
+            status_var.set("Password minimal 6 karakter")
+            return
+        if password != password2:
+            status_var.set("Ulangi password tidak sama")
+            entry_pw2.delete(0, "end")
+            entry_pw2.focus_set()
+            return
+        status_var.set("Mendaftarkan akun...")
+        win.update_idletasks()
+        ok, msg, data = auth_client.register(None, username, password, full_name)
+        if ok:
+            # akun sudah aktif + token dari server -> langsung masuk
+            result.update(data)
+            win.destroy()
+        else:
+            fail(msg)
+
+    def submit(event=None):
+        if state["register"]:
+            do_register()
+        else:
+            do_login()
+
+    btn = ttk.Button(win, text="Login", command=submit)
     btn.pack(pady=4)
-    win.bind("<Return>", do_login)
+    toggle_btn = ttk.Button(win, text="Belum punya akun? Daftar", command=toggle_mode)
+    toggle_btn.pack(pady=2)
+    win.bind("<Return>", submit)
     win.bind("<Escape>", lambda e: win.destroy())
 
     entry_user.focus_set()

@@ -1,8 +1,9 @@
-"""Backend login FastAPI - tanpa register, user dikelola via CLI seed_user.
+"""Backend login FastAPI - register publik + user juga bisa dikelola via CLI seed_user.
 
 Endpoint:
   GET  /api/health      -> cek koneksi DB
   POST /api/login       -> {username, password, device} -> token + info user
+  POST /api/register    -> {username, password, full_name, device} -> akun aktif + token
   GET  /api/me          -> profil user dari token (Bearer)
   GET  /api/login-logs  -> riwayat login + device (admin audit, butuh Bearer)
 """
@@ -15,7 +16,14 @@ import psycopg
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 
 from . import config, db, security
-from .schemas import HealthOut, LoginLogOut, LoginRequest, LoginResponse, UserOut
+from .schemas import (
+    HealthOut,
+    LoginLogOut,
+    LoginRequest,
+    LoginResponse,
+    RegisterRequest,
+    UserOut,
+)
 
 config.check_secret()
 
@@ -146,6 +154,53 @@ def login(body: LoginRequest, request: Request) -> LoginResponse:
             if reason != "inactive"
             else "Akun nonaktif, hubungi admin",
         )
+
+    token = security.make_token({"uid": row["id"], "uname": row["username"]})
+    return LoginResponse(
+        access_token=token,
+        expires_in=config.AUTH_TOKEN_TTL_HOURS * 3600,
+        user=_user_out(dict(row)),
+    )
+
+
+@app.post("/api/register", response_model=LoginResponse, status_code=201)
+def register(body: RegisterRequest, request: Request) -> LoginResponse:
+    """Daftar akun baru. Akun langsung aktif; respons berisi token (auto-login)."""
+    device = _clean_device(body.device)
+    ip = _client_ip(request)
+    ua = (request.headers.get("user-agent") or "")[:300]
+    username = body.username.strip()
+    full_name = body.full_name.strip()
+    password_hash = security.hash_password(body.password)
+
+    try:
+        with db.get_conn() as conn:
+            row = conn.execute(
+                "INSERT INTO users (username, password_hash, full_name, is_active, last_login_at) "
+                "VALUES (%s, %s, %s, true, now()) "
+                "ON CONFLICT (username) DO NOTHING "
+                "RETURNING id, username, full_name, is_active",
+                (username, password_hash, full_name),
+            ).fetchone()
+            if row is None:
+                raise HTTPException(status_code=409, detail="Username sudah dipakai")
+
+            # audit: pendaftaran sekaligus login pertama
+            conn.execute(
+                "INSERT INTO login_logs "
+                "(user_id, username, success, reason, device, ip, user_agent) "
+                "VALUES (%s, %s, true, 'registered', %s::jsonb, %s, %s)",
+                (
+                    row["id"],
+                    username,
+                    json.dumps(device, ensure_ascii=False),
+                    ip,
+                    ua,
+                ),
+            )
+            conn.commit()
+    except psycopg.Error:
+        raise HTTPException(status_code=503, detail="Database tidak tersedia")
 
     token = security.make_token({"uid": row["id"], "uname": row["username"]})
     return LoginResponse(
