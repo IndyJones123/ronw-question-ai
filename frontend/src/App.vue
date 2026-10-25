@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 
 // ---- i18n: EN / ID toggle ----
 type Locale = 'id' | 'en'
@@ -23,6 +23,7 @@ const i18n = {
     heroCtaDownload: 'Download Sekarang',
     heroCtaFeatures: 'Lihat Fitur',
     trialLabel: 'Trial Demo',
+    visitorLabel: 'Total Pengunjung',
     // features
     featuresTitle: 'Fitur Utama',
     featuresDesc: 'Semua yang kamu butuh buat jawab quiz cepat dan akurat.',
@@ -111,6 +112,7 @@ const i18n = {
     heroCtaDownload: 'Download Now',
     heroCtaFeatures: 'View Features',
     trialLabel: 'Trial Demo',
+    visitorLabel: 'Total Visitors',
     // features
     featuresTitle: 'Key Features',
     featuresDesc: 'Everything you need to answer quizzes fast and accurately.',
@@ -205,6 +207,19 @@ const waLink = computed(() => {
 
 // cek apakah env masih placeholder (belum diisi)
 const isPlaceholder = (val: string) => !val || val.includes('XXXXX') || val === '#'
+
+// ---- counter pengunjung unik (dedup by IP lewat backend) ----
+const visitorCount = ref<number | null>(null)
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/visit', { method: 'POST' })
+    if (!res.ok) return
+    const data = await res.json()
+    visitorCount.value = data.count
+  } catch {
+    // backend tidak tersedia -> counter disembunyikan
+  }
+})
 </script>
 
 <template>
@@ -259,10 +274,23 @@ const isPlaceholder = (val: string) => !val || val.includes('XXXXX') || val === 
     </div>
 
     <div class="relative max-w-6xl mx-auto px-4 sm:px-6 text-center">
-      <span class="inline-flex items-center gap-2 bg-slate-800/70 border border-slate-700 text-brand-200 text-xs font-medium px-3 py-1.5 rounded-full mb-6">
-        <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
-        {{ t.badge }}
-      </span>
+      <div class="flex flex-wrap items-center justify-center gap-2 mb-6">
+        <span class="inline-flex items-center gap-2 bg-slate-800/70 border border-slate-700 text-brand-200 text-xs font-medium px-3 py-1.5 rounded-full">
+          <span class="w-2 h-2 bg-green-400 rounded-full animate-pulse"></span>
+          {{ t.badge }}
+        </span>
+        <span
+          v-if="visitorCount !== null"
+          class="inline-flex items-center gap-1.5 bg-brand-600/10 border border-brand-700/40 text-brand-200 text-xs font-semibold px-3 py-1.5 rounded-full"
+        >
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path stroke-linecap="round" stroke-linejoin="round" d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+          {{ t.visitorLabel }}: {{ visitorCount.toLocaleString('id-ID') }}
+        </span>
+      </div>
 
       <h1 class="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-white leading-tight">
         {{ t.heroTitle1 }}
