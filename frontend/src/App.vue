@@ -72,7 +72,7 @@ const i18n = {
     projectRmtBadge: 'UNDER DEVELOPMENT',
     projectRmtName: 'RMT-RONW',
     projectRmtDesc: 'Proyek open source terkait RonW yang masih dalam pengembangan.',
-    projectRmtRelease: 'Estimasi rilis: 25 Oktober 2026',
+    projectRmtRelease: 'Estimasi rilis: 26 Oktober 2026',
     projectRmtSoon: 'Segera Hadir',
     // download
     downloadTitle: 'Download Quiz Live OCR',
@@ -160,7 +160,7 @@ const i18n = {
     projectRmtBadge: 'UNDER DEVELOPMENT',
     projectRmtName: 'RMT-RONW',
     projectRmtDesc: 'A RonW-related open source project, currently under development.',
-    projectRmtRelease: 'Estimated release: 25 October 2026',
+    projectRmtRelease: 'Estimated release: 26 October 2026',
     projectRmtSoon: 'Coming Soon',
     // download
     downloadTitle: 'Download Quiz Live OCR',
