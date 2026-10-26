@@ -208,11 +208,26 @@ const waLink = computed(() => {
 // cek apakah env masih placeholder (belum diisi)
 const isPlaceholder = (val: string) => !val || val.includes('XXXXX') || val === '#'
 
-// ---- counter pengunjung unik (dedup by IP lewat backend) ----
+// ---- counter pengunjung unik (dedup by device ID lewat backend) ----
 const visitorCount = ref<number | null>(null)
+function getVisitorDeviceId(): string {
+  const KEY = 'ronw_visitor_id'
+  let id = localStorage.getItem(KEY)
+  if (!id) {
+    id = crypto.randomUUID
+      ? crypto.randomUUID()
+      : `dev-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+    localStorage.setItem(KEY, id)
+  }
+  return id
+}
 onMounted(async () => {
   try {
-    const res = await fetch('/api/visit', { method: 'POST' })
+    const res = await fetch('/api/visit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_id: getVisitorDeviceId() }),
+    })
     if (!res.ok) return
     const data = await res.json()
     visitorCount.value = data.count
